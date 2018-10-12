@@ -28,8 +28,6 @@ import numpy as np
 import six
 import tensorflow as tf
 
-import dataset_common
-
 '''How to organize your dataset folder:
   VOCROOT/
        |->VOC2007/
@@ -62,6 +60,8 @@ RANDOM_SEED = 180428
 
 FLAGS = tf.app.flags.FLAGS
 
+classes = []
+
 
 def set_training_datasets():
     try:
@@ -69,11 +69,12 @@ def set_training_datasets():
     except Exception as e:
         print('No folder named ~/data')
         print('Exception: ', e)
+        exit()
     if len(datasets) == 0:
         print('No datasets in ~/data, run config_new_dataset.py on your dataset and move the dataset folder to ~/data')
     for i in range(0, len(datasets)):
         print('[', i, ']', datasets[i])
-    user_input = str(raw_input(
+    user_input = str(input(
         'Input the number for the datasets you wish to train on, separate numbers with space: ')).split()
     training_dataset_paths = []
     for dataset_index in user_input:
@@ -117,6 +118,24 @@ def setup_train_data():
             elif filename.endswith('.xml'):
                 shutil.copy2(os.path.join(dataset, 'test', filename),
                              os.path.join(tmp_folder_test_path, 'Annotations'))
+    return get_classes([os.path.join(tmp_folder_test_path, 'Annotations'), os.path.join(tmp_folder_train_path, 'Annotations')])
+
+
+def get_classes(paths):
+    classes = []
+    for path in paths:
+        for filename in os.listdir(path):
+            if filename.endswith(".xml"):
+                tree = xml_tree.parse(os.path.join(path, filename))
+                root = tree.getroot()
+                for child in root:
+                    for child in child:
+                        if child.tag == "name":
+                            if child.text not in classes:
+                                classes.append(child.text)
+            else:
+                continue
+    return classes
 
 
 def _int64_feature(value):
@@ -263,7 +282,7 @@ def _process_image(filename, coder):
     return image_data, height, width
 
 
-def _find_image_bounding_boxes(directory, cur_record):
+def _find_image_bounding_boxes(directory, cur_record, classes):
     """Find the bounding boxes for a given image file.
 
     Args:
@@ -295,7 +314,7 @@ def _find_image_bounding_boxes(directory, cur_record):
     truncated = []
     for obj in root.findall('object'):
         label = obj.find('name').text
-        labels.append(int(dataset_common.VOC_LABELS[label][0]))
+        labels.append(int(classes.index(label)))
         labels_text.append(label.encode('ascii'))
 
         isdifficult = obj.find('difficult')
@@ -319,7 +338,7 @@ def _find_image_bounding_boxes(directory, cur_record):
     return bboxes, labels, labels_text, difficult, truncated
 
 
-def _process_image_files_batch(coder, thread_index, ranges, name, directory, all_records, num_shards):
+def _process_image_files_batch(coder, thread_index, ranges, name, directory, all_records, num_shards, classes):
     """Processes and saves list of images as TFRecord in 1 thread.
 
     Args:
@@ -361,7 +380,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, directory, all
                 directory, cur_record[0], 'JPEGImages', cur_record[1])
 
             bboxes, labels, labels_text, difficult, truncated = _find_image_bounding_boxes(
-                directory, cur_record)
+                directory, cur_record, classes)
             image_buffer, height, width = _process_image(filename, coder)
 
             example = _convert_to_example(filename, cur_record[1], image_buffer, bboxes, labels, labels_text,
@@ -385,7 +404,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, directory, all
     sys.stdout.flush()
 
 
-def _process_image_files(name, directory, all_records, num_shards):
+def _process_image_files(name, directory, all_records, num_shards, classes):
     """Process and save list of images as TFRecord of Example protos.
 
     Args:
@@ -416,7 +435,7 @@ def _process_image_files(name, directory, all_records, num_shards):
     threads = []
     for thread_index in range(len(ranges)):
         args = (coder, thread_index, ranges, name,
-                directory, all_records, num_shards)
+                directory, all_records, num_shards, classes)
         t = threading.Thread(target=_process_image_files_batch, args=args)
         t.start()
         threads.append(t)
@@ -428,7 +447,7 @@ def _process_image_files(name, directory, all_records, num_shards):
     sys.stdout.flush()
 
 
-def _process_dataset(name, directory, all_splits, num_shards):
+def _process_dataset(name, directory, all_splits, num_shards, classes):
     """Process a complete data set and save it as a TFRecord.
 
     Args:
@@ -464,11 +483,12 @@ def main(unused_argv):
     print('Saving results to %s' % FLAGS.output_directory)
 
     # Run it!
-    setup_train_data()
+    classes = setup_train_data()
+
     _process_dataset('val', FLAGS.DATA_PATH, ['/tmp/test'],
-                     FLAGS.validation_shards)
+                     FLAGS.validation_shards, classes)
     _process_dataset('train', FLAGS.DATA_PATH,
-                     ['/tmp/train'], FLAGS.train_shards)
+                     ['/tmp/train'], FLAGS.train_shards, classes)
 
 
 if __name__ == '__main__':
