@@ -128,14 +128,23 @@ def get_classes(paths):
             if filename.endswith(".xml"):
                 tree = xml_tree.parse(os.path.join(path, filename))
                 root = tree.getroot()
-                for child in root:
-                    for child in child:
-                        if child.tag == "name":
-                            if child.text not in classes:
-                                classes.append(child.text)
+                for obj in root.findall('object'):
+                    label = obj.find('name').text
+                    if label not in classes:
+                        classes.append(label)
             else:
                 continue
     return classes
+
+
+def generate_classes_file(path, classes):
+    class_file = open(os.path.join(path, 'classes.txt'), 'w')
+    for clas in classes:
+        if clas == classes[-1]:
+            class_file.write(clas)
+        else:
+            class_file.write(clas + '\n')
+    class_file.close()
 
 
 def _int64_feature(value):
@@ -460,14 +469,15 @@ def _process_dataset(name, directory, all_splits, num_shards, classes):
     for split in all_splits:
         jpeg_file_path = os.path.join(directory, split, 'JPEGImages')
         images = tf.gfile.ListDirectory(jpeg_file_path)
-        jpegs = [im_name for im_name in images if im_name.strip()[-3:] == 'jpg']
+        jpegs = [im_name for im_name in images if im_name.strip()[-3:]
+                 == 'jpg']
         all_records.extend(list(zip([split] * len(jpegs), jpegs)))
 
     shuffled_index = list(range(len(all_records)))
     random.seed(RANDOM_SEED)
     random.shuffle(shuffled_index)
     all_records = [all_records[i] for i in shuffled_index]
-    _process_image_files(name, directory, all_records, num_shards)
+    _process_image_files(name, directory, all_records, num_shards, classes)
 
 
 def parse_comma_list(args):
@@ -484,11 +494,12 @@ def main(unused_argv):
 
     # Run it!
     classes = setup_train_data()
+    generate_classes_file(os.path.join(FLAGS.DATA_PATH, 'tmp'), classes)
 
-    _process_dataset('val', FLAGS.DATA_PATH, ['/tmp/test'],
+    _process_dataset('val', FLAGS.DATA_PATH, ['tmp/test'],
                      FLAGS.validation_shards, classes)
     _process_dataset('train', FLAGS.DATA_PATH,
-                     ['/tmp/train'], FLAGS.train_shards, classes)
+                     ['tmp/train'], FLAGS.train_shards, classes)
 
 
 if __name__ == '__main__':
