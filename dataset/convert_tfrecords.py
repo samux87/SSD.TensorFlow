@@ -122,7 +122,7 @@ def setup_train_data():
 
 
 def get_classes(paths):
-    classes = []
+    classes = ['none']
     for path in paths:
         for filename in os.listdir(path):
             if filename.endswith(".xml"):

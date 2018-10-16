@@ -203,7 +203,7 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
         def anchor_encoder_fn(glabels_, gbboxes_): return anchor_encoder_decoder.encode_all_anchors(
             glabels_, gbboxes_, all_anchors, all_num_anchors_depth, all_num_anchors_spatial)
 
-        classes_file = open(FLAGS.classes_file, 'r')
+        classes_file = open(FLAGS.classes, 'r')
         classes_file_lines = classes_file.readlines()
         classes = []
         for line in classes_file_lines:
